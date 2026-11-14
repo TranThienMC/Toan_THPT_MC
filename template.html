@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Bài Ôn Tập</title>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; }
+        #login-screen { text-align: center; margin-top: 100px; padding: 30px; border: 1px solid #ccc; border-radius: 10px; background: #f9f9f9; }
+        #quiz-screen { display: none; } /* Ẩn toàn bộ đề thi ban đầu */
+        .info-group input, #login-screen input { padding: 10px; width: 220px; border: 1px solid #ccc; border-radius: 5px; margin: 5px; }
+        button { padding: 12px 25px; background-color: #0056b3; color: white; border: none; cursor: pointer; border-radius: 5px; font-weight: bold; }
+        .question { margin-bottom: 25px; padding: 20px; border: 1px solid #ddd; border-radius: 8px; }
+        .explanation { display: none; margin-top: 20px; padding: 15px; background-color: #e9ecef; border-left: 4px solid #28a745; }
+        .timer-box { font-size: 22px; font-weight: bold; color: #dc3545; text-align: center; margin-bottom: 25px; background: #fff3f3; padding: 15px; border: 2px solid #ffc107; }
+        .tf-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        .tf-table th, .tf-table td { border: 1px solid #ccc; padding: 10px; text-align: center; }
+        .tf-table td:first-child { text-align: left; width: 70%; }
+    </style>
+</head>
+<body>
+    <!-- MÀN HÌNH ĐĂNG NHẬP MẬT KHẨU -->
+    <div id="login-screen">
+        <h2>NHẬP MẬT KHẨU ĐỂ LÀM BÀI</h2>
+        <input type="password" id="passInput" placeholder="Nhập mật khẩu thầy cấp"><br><br>
+        <button onclick="checkPassword()">Vào Thi</button>
+        <p id="passError" style="color: red; display: none;">Sai mật khẩu, vui lòng nhập lại!</p>
+    </div>
+
+    <!-- MÀN HÌNH LÀM BÀI CHÍNH -->
+    <div id="quiz-screen">
+        <h2 style="text-align: center; color: #0056b3;">ĐỀ KIỂM TRA MÔN TOÁN</h2>
+        <div class="timer-box">Thời gian còn lại: <span id="time">Đang tải...</span></div>
+        
+        <div class="info-group">
+            <input type="text" id="hovaten" placeholder="Họ và tên học sinh" required>
+            <input type="text" id="lophoc" placeholder="Lớp (vd: 12A1)" required>
+            <input type="text" id="truonghoc" placeholder="Trường (vd: THPT Hưng Đạo)" required>
+        </div>
+
+        <form id="quizForm">
+            <!-- {NOI_DUNG_CAU_HOI} -->
+            <div style="text-align: center; margin-top: 30px;">
+                <button type="button" id="btnSubmit" onclick="submitQuiz()">Nộp Bài</button>
+            </div>
+        </form>
+        <div id="result" style="margin-top: 20px; font-size: 18px; font-weight: bold; text-align: center;"></div>
+    </div>
+
+    <script>
+        // CẤU HÌNH CƠ BẢN
+        const MAT_KHAU_DE_THI = "123456"; // Đổi mật khẩu tại đây
+        const timeLimitMinutes = 45; 
+        const timerKey = 'endTime_bai1'; 
+        const storageKey = 'quiz_bai1'; 
+        const scriptURL = '<DÁN_LINK_APPS_SCRIPT_BƯỚC_1_VÀO_ĐÂY>'; 
+        
+        let cheatCount = 0; 
+        /* {JSON_DAP_AN} */
+
+        // XÁC THỰC MẬT KHẨU
+        function checkPassword() {
+            if(document.getElementById("passInput").value === MAT_KHAU_DE_THI) {
+                document.getElementById("login-screen").style.display = "none";
+                document.getElementById("quiz-screen").style.display = "block";
+                initTimer(); // Bắt đầu tính giờ khi đã vào trong
+                loadProgress();
+            } else {
+                document.getElementById("passError").style.display = "block";
+            }
+        }
+
+        // HỆ THỐNG ĐỒNG HỒ & CHỐNG GIAN LẬN
+        async function initTimer() {
+            let timerElement = document.getElementById('time');
+            let serverTime;
+            try {
+                let res = await fetch(window.location.href, { method: 'HEAD', cache: 'no-cache' });
+                serverTime = new Date(res.headers.get('Date')).getTime();
+            } catch(e) { serverTime = Date.now(); }
+
+            let endTime = localStorage.getItem(timerKey);
+            if (!endTime) {
+                endTime = serverTime + (timeLimitMinutes * 60 * 1000);
+                localStorage.setItem(timerKey, endTime);
+            }
+
+            let timeInSeconds = Math.floor((endTime - serverTime) / 1000);
+            if (timeInSeconds <= 0) { hetGio(); return; }
+
+            let timer = setInterval(function() {
+                let minutes = Math.floor(timeInSeconds / 60);
+                let seconds = timeInSeconds % 60;
+                timerElement.textContent = (minutes < 10 ? "0"+minutes : minutes) + ":" + (seconds < 10 ? "0"+seconds : seconds);
+                if (timeInSeconds <= 0) { clearInterval(timer); hetGio(); }
+                timeInSeconds--; 
+            }, 1000);
+        }
+
+        function hetGio() {
+            document.getElementById('time').textContent = "00:00";
+            alert("Đã hết giờ! Hệ thống tự động nộp bài.");
+            if (!document.getElementById('hovaten').value) document.getElementById('hovaten').value = "Quên tên";
+            document.getElementById('btnSubmit').disabled = true;
+            submitQuiz();
+        }
+
+        function loadProgress() {
+            let saved = localStorage.getItem(storageKey);
+            if (saved) {
+                let state = JSON.parse(saved);
+                if (state.hovaten) document.getElementById('hovaten').value = state.hovaten;
+                if (state.lophoc) document.getElementById('lophoc').value = state.lophoc;
+                if (state.truonghoc) document.getElementById('truonghoc').value = state.truonghoc;
+                if (state.cheatCount) cheatCount = parseInt(state.cheatCount);
+                for (let key in state) {
+                    if (!['hovaten','lophoc','truonghoc','cheatCount'].includes(key)) {
+                        let radio = document.querySelector(`input[name="${key}"][value="${state[key]}"]`);
+                        if (radio) radio.checked = true;
+                        else {
+                            let text = document.querySelector(`input[name="${key}"]`);
+                            if (text && text.type === "text") text.value = state[key];
+                        }
+                    }
+                }
+            }
+        }
+
+        function saveProgress() {
+            let state = { hovaten: document.getElementById('hovaten').value, lophoc: document.getElementById('lophoc').value, truonghoc: document.getElementById('truonghoc').value, cheatCount: cheatCount };
+            let formData = new FormData(document.getElementById('quizForm'));
+            for (let [key, value] of formData.entries()) state[key] = value;
+            localStorage.setItem(storageKey, JSON.stringify(state));
+        }
+
+        document.addEventListener("visibilitychange", function() {
+            if (document.hidden && document.getElementById("quiz-screen").style.display === "block" && !document.getElementById('btnSubmit').disabled) {
+                cheatCount++; saveProgress();
+                alert(`⚠️ CẢNH BÁO GIAN LẬN (${cheatCount} lần)!\nEm vừa rời khỏi bài thi.`);
+            }
+        });
+
+        document.getElementById('quizForm').addEventListener('change', saveProgress);
+        document.querySelectorAll('.info-group input').forEach(el => el.addEventListener('input', saveProgress));
+
+        // NỘP BÀI & CHẤM ĐIỂM
+        function submitQuiz() {
+            let hovaten = document.getElementById('hovaten').value;
+            let lophoc = document.getElementById('lophoc').value;
+            let truonghoc = document.getElementById('truonghoc').value;
+            if (!hovaten || !lophoc || !truonghoc) { alert("Vui lòng điền đủ Họ tên, Lớp, Trường!"); return; }
+            if(!document.getElementById('btnSubmit').disabled && !confirm("Nộp bài và xem điểm?")) return;
+
+            let form = document.getElementById('quizForm');
+            let totalScore = 0; let chitietArr = [];
+
+            for (let [q, ans] of Object.entries(correctAnswersMC)) {
+                let sel = form.querySelector(`input[name="${q}"]:checked`);
+                if (sel && sel.value === ans) totalScore += 0.25;
+                chitietArr.push(`${q.replace('q','')}${sel ? sel.value : "_"}`);
+            }
+            for (let [q, ansObj] of Object.entries(correctAnswersTF)) {
+                let tfCorrect = 0, tfAns = [];
+                for (let [item, ans] of Object.entries(ansObj)) {
+                    let sel = form.querySelector(`input[name="${q}_${item}"]:checked`);
+                    if (sel && sel.value === ans) tfCorrect++;
+                    tfAns.push(`${item}-${sel ? sel.value : "_"}`);
+                }
+                if (tfCorrect === 1) totalScore += 0.1; else if (tfCorrect === 2) totalScore += 0.25; else if (tfCorrect === 3) totalScore += 0.5; else if (tfCorrect === 4) totalScore += 1.0;
+                chitietArr.push(`${q.replace('q','')}(${tfAns.join(',')})`);
+            }
+            for (let [q, ans] of Object.entries(correctAnswersSA)) {
+                let inp = form.querySelector(`input[name="${q}"]`);
+                if (inp) {
+                    let stuAns = inp.value.trim().replace(',', '.'); let correctAns = ans.toString().replace(',', '.');
+                    if (stuAns !== "" && stuAns === correctAns) totalScore += 0.5;
+                    chitietArr.push(`${q.replace('q','')}[${stuAns || "_"}]`);
+                }
+            }
+
+            totalScore = Math.max(0, Math.round((totalScore - (cheatCount * 0.5)) * 100) / 100);
+            
+            let payload = { 
+                hovaten: hovaten, lophoc: lophoc, truong: truonghoc, 
+                chuyende: "Khối 12 - Chương 1", baiontap: "Đề 01", 
+                diem: totalScore, chitiet: chitietArr.join('; '), gianlan: cheatCount 
+            };
+
+            document.getElementById('result').innerText = `Đang nộp bài...`;
+            document.getElementById('btnSubmit').disabled = true;
+
+            fetch(scriptURL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+            .then(() => {
+                document.getElementById('result').innerText = `Thành công! Điểm của em: ${totalScore}.`;
+                document.getElementById('result').style.color = "#28a745";
+                localStorage.removeItem(storageKey); localStorage.removeItem(timerKey);
+                
+                // MỞ KHÓA HIỂN THỊ LỜI GIẢI 
+                document.querySelectorAll('.explanation').forEach(el => el.style.display = 'block');
+            }).catch(err => { document.getElementById('result').innerText = `Lỗi mạng! Thử lại.`; });
+        }
+    </script>
+</body>
+</html>
